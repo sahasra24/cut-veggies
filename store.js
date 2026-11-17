@@ -1,5 +1,5 @@
 // Data layer: Firebase (live, free Spark plan) or DEMO (localStorage, this browser only).
-import { FIREBASE, DEFAULT_MENU, NTFY_TOPIC, SHOP } from "./config.js";
+import { FIREBASE, FIREBASE_UNTIL, DEFAULT_MENU, NTFY_TOPIC, SHOP } from "./config.js";
 
 const V = "10.12.2";
 let mode = "demo";
@@ -7,6 +7,8 @@ let fb = null; // { db, auth, f: firestore fns, a: auth fns }
 
 export async function init() {
   if (!FIREBASE) return (mode = "demo");
+  // Temporary live mode: after FIREBASE_UNTIL the site stops using Firebase.
+  if (FIREBASE_UNTIL && Date.now() > Date.parse(FIREBASE_UNTIL)) return (mode = "demo");
   const app = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`);
   const f = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`);
   const a = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`);

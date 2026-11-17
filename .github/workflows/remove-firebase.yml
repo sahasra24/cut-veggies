@@ -1,0 +1,36 @@
+name: Remove Firebase settings
+
+# Runs just after midnight Eastern on Nov 19 (05:00 UTC) and takes the
+# temporary Firebase settings out of config.js. Can also be run by hand
+# from the Actions tab.
+on:
+  schedule:
+    - cron: "0 5 19 11 *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  remove:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Switch config.js back to demo mode
+        run: |
+          node -e '
+            const fs = require("fs");
+            let s = fs.readFileSync("config.js", "utf8");
+            s = s.replace(/export const FIREBASE = \{[\s\S]*?\};/, "export const FIREBASE = null;")
+                 .replace(/export const FIREBASE_UNTIL = "[^"]*";/, "export const FIREBASE_UNTIL = null;");
+            fs.writeFileSync("config.js", s);
+          '
+
+      - name: Commit if anything changed
+        run: |
+          if git diff --quiet; then echo "Nothing to remove."; exit 0; fi
+          git config user.name "Sahasra Koppal"
+          git config user.email "73932383+sahasra24@users.noreply.github.com"
+          git commit -am "Turn off Firebase (temporary period ended)"
+          git push

@@ -4,6 +4,10 @@
 //    add a Web App, and paste its config object below. See README.md.
 
 export const FIREBASE = null;
+
+// Optional switch-off time. After this moment the site stops using Firebase and
+// goes back to demo mode. null = never switch off.
+export const FIREBASE_UNTIL = null; // e.g. "2026-11-18T23:59:00-05:00"
 /* Example:
 export const FIREBASE = {
   apiKey: "AIza...",
