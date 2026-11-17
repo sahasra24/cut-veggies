@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 <header>
@@ -34,13 +34,14 @@
   <!-- BOARD -->
   <section id="board" class="hidden">
     <div class="card toolbar">
-      <div><label for="day">Pickup date</label><input id="day" type="date"></div>
+      <div><label for="view">Show</label><select id="view"><option value="upcoming">All upcoming orders</option><option value="day">One pickup day</option></select></div>
+      <div id="dayBox" class="hidden"><label for="day">Pickup date</label><input id="day" type="date"></div>
       <button id="alerts">🔔 Turn on notifications</button>
       <span class="muted" id="live"></span>
     </div>
 
     <div class="stats">
-      <div class="stat money"><span class="muted">Sales (this day)</span><b id="sales">$0.00</b></div>
+      <div class="stat money"><span class="muted">Sales (orders shown)</span><b id="sales">$0.00</b></div>
       <div class="stat" style="--c:#f0a830"><span class="muted">New</span><b id="nNew">0</b></div>
       <div class="stat" style="--c:#4a86d0"><span class="muted">Cutting</span><b id="nPrep">0</b></div>
       <div class="stat" style="--c:#43a047"><span class="muted">Ready</span><b id="nReady">0</b></div>
@@ -82,8 +83,8 @@
 
 <script>addEventListener("error", () => document.getElementById("loadErr").classList.remove("hidden"));</script>
 <script type="module">
-import * as S from "./store.js?v=7";
-import { SHOP } from "./config.js?v=7";
+import * as S from "./store.js?v=8";
+import { SHOP } from "./config.js?v=8";
 const $ = id => document.getElementById(id);
 const NEXT = { new: ["prepping", "Start cutting"], prepping: ["ready", "Mark ready"], ready: ["done", "Picked up"] };
 const LABEL = { new: "New", prepping: "Cutting", ready: "Ready", done: "Picked up", cancelled: "Cancelled" };
@@ -112,12 +113,24 @@ $("signin").onclick = async () => {
 $("out").onclick = () => S.staffSignOut();
 
 $("day").value = S.todayStr();
-$("day").onchange = () => { unwatch && unwatch(); start(); };
+const restart = () => { unwatch && unwatch(); start(); };
+$("day").onchange = restart;
+$("view").onchange = () => { $("dayBox").classList.toggle("hidden", $("view").value !== "day"); restart(); };
+
+// "Today", "Tomorrow" or "Thu, Nov 20"
+function dayLabel(d) {
+  const t = new Date(); const tm = new Date(); tm.setDate(t.getDate() + 1);
+  if (d === S.todayStr(t)) return "Today";
+  if (d === S.todayStr(tm)) return "Tomorrow";
+  const dt = new Date(d + "T12:00");
+  return isNaN(dt) ? d : dt.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+}
 
 function start() {
   $("live").textContent = "Connecting…";
-  unwatch = S.watchOrders($("day").value, (list, added) => {
-    orders = list.sort((a, b) => (a.pickupTime || "").localeCompare(b.pickupTime || "") || a.createdAt - b.createdAt);
+  const which = $("view").value === "upcoming" ? "upcoming" : $("day").value;
+  unwatch = S.watchOrders(which, (list, added) => {
+    orders = list.sort((a, b) => (a.pickupDate || "").localeCompare(b.pickupDate || "") || (a.pickupTime || "").localeCompare(b.pickupTime || "") || a.createdAt - b.createdAt);
     $("live").textContent = "Live · updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
     const fresh = added.filter(o => o.status === "new");
     if (fresh.length) alertNew(fresh);
@@ -138,7 +151,7 @@ $("alerts").onclick = async () => {
 };
 function alertNew(list) {
   list.forEach(o => flashIds.add(o.id));
-  const msg = list.length === 1 ? `${list[0].name} · pickup ${list[0].pickupTime} · code ${list[0].code}` : `${list.length} new orders`;
+  const msg = list.length === 1 ? `${list[0].name} · pickup ${dayLabel(list[0].pickupDate)} ${list[0].pickupTime} · code ${list[0].code}` : `${list.length} new orders`;
   toast("New order: " + msg);
   try { if (Notification.permission === "granted") new Notification("New cut veggie order", { body: msg, silent: true }); } catch {}
 }
@@ -146,6 +159,22 @@ function alertNew(list) {
 // Message the customer from your own phone (free): SMS or WhatsApp, pre-filled.
 function readyText(o) {
   return `Hi ${o.name}, your cut veggies order (code ${o.code}) is ready for pickup at ${SHOP.name}. Thank you!`;
+}
+function waLink(o) {
+  const digits = (o.phone || "").replace(/\D/g, "");
+  if (digits.length < 7) return null;
+  const intl = digits.length === 10 ? SHOP.countryCode + digits : digits;
+  return `https://wa.me/${intl}?text=${encodeURIComponent(readyText(o))}`;
+}
+// Mark ready, then open WhatsApp with the "ready" message to the customer (staff just taps Send).
+async function markReady(o) {
+  const link = waLink(o);
+  const win = link ? window.open("about:blank", "_blank") : null; // open now, while the tap still counts
+  try { await S.setStatus(o.id, "ready"); }
+  catch (e) { win && win.close(); throw e; }
+  if (win) win.location.href = link;
+  else if (link) location.href = link; // popup blocked: open WhatsApp in this tab
+  else toast("Marked ready. No valid phone number to WhatsApp.");
 }
 function contactLinks(o) {
   const digits = (o.phone || "").replace(/\D/g, "");
@@ -203,7 +232,7 @@ function render() {
       <table class="bill"><tbody></tbody></table><div class="muted nt"></div><div class="actions"></div>`;
     d.querySelector(".nm").textContent = o.name;
     d.querySelector(".ph").textContent = o.phone;
-    d.querySelector(".tm").textContent = o.pickupTime;
+    d.querySelector(".tm").textContent = `${dayLabel(o.pickupDate)} ${o.pickupTime}`;
     d.querySelector(".cd").textContent = o.code;
     const tb = d.querySelector("tbody");
     o.items.forEach(it => {
@@ -218,7 +247,8 @@ function render() {
     }
     if (o.notes) d.querySelector(".nt").textContent = "Note: " + o.notes;
     const act = d.querySelector(".actions");
-    if (NEXT[o.status]) act.appendChild(btn(NEXT[o.status][1], "primary", () => S.setStatus(o.id, NEXT[o.status][0])));
+    if (o.status === "prepping") act.appendChild(btn("✅ Mark ready + WhatsApp customer", "primary", () => markReady(o)));
+    else if (NEXT[o.status]) act.appendChild(btn(NEXT[o.status][1], "primary", () => S.setStatus(o.id, NEXT[o.status][0])));
     if (o.status === "ready") contactLinks(o).forEach(a => act.appendChild(a));
     d.id = "o-" + o.id;
     if (["new", "prepping"].includes(o.status)) act.appendChild(btn("Cancel", "danger", () => S.setStatus(o.id, "cancelled")));

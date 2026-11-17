@@ -1,7 +1,7 @@
 // Data layer: Firebase (live, free Spark plan) or DEMO (localStorage, this browser only).
 // Read config as a namespace so a missing setting can never stop the page from loading.
 // Keep ?v= the same as in index.html / kitchen.html and bump it on every update.
-import * as C from "./config.js?v=7";
+import * as C from "./config.js?v=8";
 const { FIREBASE, DEFAULT_MENU, NTFY_TOPIC } = C;
 const SHOP = C.SHOP || {};
 const FIREBASE_UNTIL = C.FIREBASE_UNTIL || null;
@@ -118,14 +118,17 @@ export function watchOrders(date, cb, onErr) {
     let seen = null;
     return onLocal(() => {
       const all = lsGet(LS.orders, {});
-      const list = Object.entries(all).map(([id, o]) => ({ id, ...o })).filter(o => o.pickupDate === date);
+      const list = Object.entries(all).map(([id, o]) => ({ id, ...o }))
+        .filter(o => date === "upcoming" ? o.pickupDate >= todayStr() : o.pickupDate === date);
       const added = seen ? list.filter(o => !seen.has(o.id)) : [];
       seen = new Set(list.map(o => o.id));
       cb(list, added);
     });
   }
   let first = true;
-  const q = fb.f.query(fb.f.collection(fb.db, "orders"), fb.f.where("pickupDate", "==", date));
+  // "upcoming" = today and later (single-field range, no extra index needed)
+  const cond = date === "upcoming" ? fb.f.where("pickupDate", ">=", todayStr()) : fb.f.where("pickupDate", "==", date);
+  const q = fb.f.query(fb.f.collection(fb.db, "orders"), cond);
   return fb.f.onSnapshot(q, snap => {
     const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const added = first ? [] : snap.docChanges().filter(c => c.type === "added").map(c => ({ id: c.doc.id, ...c.doc.data() }));
