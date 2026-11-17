@@ -1,5 +1,10 @@
 // Data layer: Firebase (live, free Spark plan) or DEMO (localStorage, this browser only).
-import { FIREBASE, FIREBASE_UNTIL, DEFAULT_MENU, NTFY_TOPIC, SHOP } from "./config.js";
+// Read config as a namespace so a missing setting can never stop the page from loading.
+// Keep ?v= the same as in index.html / kitchen.html and bump it on every update.
+import * as C from "./config.js?v=5";
+const { FIREBASE, DEFAULT_MENU, NTFY_TOPIC } = C;
+const SHOP = C.SHOP || {};
+const FIREBASE_UNTIL = C.FIREBASE_UNTIL || null;
 
 const V = "10.12.2";
 let mode = "demo";
