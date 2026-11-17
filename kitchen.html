@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kitchen – Cut Veggie Orders</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Kitchen orders</h1>
+  <div><a href="index.html">Order page</a> &nbsp; <button class="link hidden" id="out">Sign out</button></div>
+</header>
+<main>
+  <div id="demo" class="banner hidden">Demo mode: orders are only saved in this browser. Open the Order page in another tab to test.</div>
+
+  <!-- SIGN IN -->
+  <section id="login" class="card hidden" style="max-width:420px;margin:30px auto">
+    <h2>Staff sign in</h2>
+    <label for="email">Email</label><input id="email" type="email" autocomplete="username">
+    <label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password">
+    <p class="muted" id="demoHint"></p>
+    <button class="primary" id="signin" style="margin-top:10px">Sign in</button>
+    <div class="err" id="loginErr"></div>
+  </section>
+
+  <!-- BOARD -->
+  <section id="board" class="hidden">
+    <div class="card toolbar">
+      <div><label for="day">Pickup date</label><input id="day" type="date"></div>
+      <button id="alerts">🔔 Turn on notifications</button>
+      <span class="muted" id="live"></span>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><span class="muted">New</span><b id="nNew">0</b></div>
+      <div class="stat"><span class="muted">Cutting</span><b id="nPrep">0</b></div>
+      <div class="stat"><span class="muted">Ready</span><b id="nReady">0</b></div>
+      <div class="stat"><span class="muted">Picked up</span><b id="nDone">0</b></div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h2>What to cut (still to do)</h2>
+      <p class="muted">Totals from orders that are New or Cutting. Cut only this much – no extra, no waste.</p>
+      <table><thead><tr><th>Vegetable</th><th>Cut</th><th>Amount</th><th>Orders</th></tr></thead><tbody id="prep"></tbody></table>
+    </div>
+
+    <div class="card">
+      <div class="tabs" id="tabs">
+        <button data-f="open" class="on">Open</button>
+        <button data-f="new">New</button>
+        <button data-f="prepping">Cutting</button>
+        <button data-f="ready">Ready</button>
+        <button data-f="done">Picked up</button>
+        <button data-f="cancelled">Cancelled</button>
+      </div>
+      <div id="orders"></div>
+    </div>
+
+    <details class="card">
+      <summary><b>Edit menu</b> <span class="muted">– vegetables, cuts, availability</span></summary>
+      <p class="muted">Cuts are comma separated. Untick "Available" when you're out of something.</p>
+      <div id="menuRows"></div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button id="addVeg">+ Add vegetable</button>
+        <button class="primary" id="saveMenu">Save menu</button>
+        <span class="muted" id="menuMsg"></span>
+      </div>
+    </details>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import * as S from "./store.js";
+import { SHOP } from "./config.js";
+const $ = id => document.getElementById(id);
+const NEXT = { new: ["prepping", "Start cutting"], prepping: ["ready", "Mark ready"], ready: ["done", "Picked up"] };
+const LABEL = { new: "New", prepping: "Cutting", ready: "Ready", done: "Picked up", cancelled: "Cancelled" };
+let orders = [], filter = "open", unwatch = null, flashIds = new Set();
+const focusId = location.hash.slice(1); // opened from a phone notification
+if (focusId) flashIds.add(focusId);
+
+await S.init();
+const demo = S.getMode() === "demo";
+if (demo) { $("demo").classList.remove("hidden"); $("demoHint").textContent = "Demo mode: any email/password works."; }
+
+S.onStaff(u => {
+  $("login").classList.toggle("hidden", !!u);
+  $("board").classList.toggle("hidden", !u);
+  $("out").classList.toggle("hidden", !u);
+  if (u && !unwatch) { start(); loadMenuEditor(); }
+  if (!u && unwatch) { unwatch(); unwatch = null; }
+});
+
+$("signin").onclick = async () => {
+  $("loginErr").textContent = "";
+  try { await S.staffSignIn($("email").value.trim(), $("pw").value); }
+  catch { $("loginErr").textContent = "Wrong email or password."; }
+};
+$("out").onclick = () => S.staffSignOut();
+
+$("day").value = S.todayStr();
+$("day").onchange = () => { unwatch && unwatch(); start(); };
+
+function start() {
+  $("live").textContent = "Connecting…";
+  unwatch = S.watchOrders($("day").value, (list, added) => {
+    orders = list.sort((a, b) => (a.pickupTime || "").localeCompare(b.pickupTime || "") || a.createdAt - b.createdAt);
+    $("live").textContent = "Live · updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const fresh = added.filter(o => o.status === "new");
+    if (fresh.length) alertNew(fresh);
+    render();
+  }, () => { $("live").textContent = "Can't load orders – check your connection or sign in again."; });
+}
+
+// ---------- alerts ----------
+function syncAlertBtn() {
+  const p = ("Notification" in window) ? Notification.permission : "unsupported";
+  if (p === "granted") { $("alerts").textContent = "🔔 Notifications on"; $("alerts").disabled = true; }
+  else if (p === "denied" || p === "unsupported") { $("alerts").classList.add("hidden"); }
+}
+syncAlertBtn();
+$("alerts").onclick = async () => {
+  try { await Notification.requestPermission(); } catch {}
+  syncAlertBtn();
+};
+function alertNew(list) {
+  list.forEach(o => flashIds.add(o.id));
+  const msg = list.length === 1 ? `${list[0].name} · pickup ${list[0].pickupTime} · code ${list[0].code}` : `${list.length} new orders`;
+  toast("New order: " + msg);
+  try { if (Notification.permission === "granted") new Notification("New cut veggie order", { body: msg, silent: true }); } catch {}
+}
+
+// Message the customer from your own phone (free): SMS or WhatsApp, pre-filled.
+function readyText(o) {
+  return `Hi ${o.name}, your cut veggies order (code ${o.code}) is ready for pickup at ${SHOP.name}. Thank you!`;
+}
+function contactLinks(o) {
+  const digits = (o.phone || "").replace(/\D/g, "");
+  if (digits.length < 7) return [];
+  const intl = digits.length === 10 ? SHOP.countryCode + digits : digits;
+  const text = encodeURIComponent(readyText(o));
+  const sms = document.createElement("a");
+  sms.className = "btnlink"; sms.textContent = "💬 Text customer";
+  sms.href = `sms:${digits}?&body=${text}`;
+  const wa = document.createElement("a");
+  wa.className = "btnlink"; wa.textContent = "🟢 WhatsApp customer";
+  wa.href = `https://wa.me/${intl}?text=${text}`; wa.target = "_blank"; wa.rel = "noopener";
+  return [sms, wa];
+}
+function toast(t) {
+  const el = $("toast"); el.textContent = t; el.style.display = "block";
+  clearTimeout(el._t); el._t = setTimeout(() => (el.style.display = "none"), 6000);
+}
+
+// ---------- render ----------
+function render() {
+  const count = s => orders.filter(o => o.status === s).length;
+  $("nNew").textContent = count("new"); $("nPrep").textContent = count("prepping");
+  $("nReady").textContent = count("ready"); $("nDone").textContent = count("done");
+  document.title = (count("new") ? `(${count("new")}) ` : "") + "Kitchen – Cut Veggie Orders";
+
+  // prep totals
+  const totals = {};
+  orders.filter(o => o.status === "new" || o.status === "prepping").forEach(o => o.items.forEach(it => {
+    const k = `${it.veg}|${it.cut}|${it.unit}`;
+    totals[k] = totals[k] || { ...it, qty: 0, n: 0 };
+    totals[k].qty += Number(it.qty) || 0; totals[k].n++;
+  }));
+  const tb = $("prep"); tb.innerHTML = "";
+  const rows = Object.values(totals).sort((a, b) => a.veg.localeCompare(b.veg));
+  if (!rows.length) tb.innerHTML = '<tr><td colspan="4" class="muted">Nothing to cut right now.</td></tr>';
+  rows.forEach(r => {
+    const tr = document.createElement("tr");
+    [r.veg, r.cut].forEach(t => { const td = document.createElement("td"); td.textContent = t; tr.appendChild(td); });
+    const q = document.createElement("td"); q.className = "num"; q.textContent = `${+r.qty.toFixed(2)} ${r.unit}`; tr.appendChild(q);
+    const n = document.createElement("td"); n.textContent = r.n; tr.appendChild(n);
+    tb.appendChild(tr);
+  });
+
+  // order cards
+  const box = $("orders"); box.innerHTML = "";
+  const shown = orders.filter(o => filter === "open" ? ["new", "prepping", "ready"].includes(o.status) : o.status === filter);
+  if (!shown.length) box.innerHTML = '<p class="muted">No orders here.</p>';
+  shown.forEach(o => {
+    const d = document.createElement("div");
+    d.className = "order" + (flashIds.has(o.id) ? " flash" : "");
+    d.innerHTML = `<div class="top"><div><b class="nm"></b> <span class="muted ph"></span></div>
+      <div><span class="muted">Pickup <b class="tm"></b> · code <b class="cd"></b></span> <span class="pill s-${o.status}">${LABEL[o.status]}</span></div></div>
+      <ul></ul><div class="muted nt"></div><div class="actions"></div>`;
+    d.querySelector(".nm").textContent = o.name;
+    d.querySelector(".ph").textContent = o.phone;
+    d.querySelector(".tm").textContent = o.pickupTime;
+    d.querySelector(".cd").textContent = o.code;
+    const ul = d.querySelector("ul");
+    o.items.forEach(it => { const li = document.createElement("li"); li.textContent = `${it.veg} – ${it.cut} – ${it.qty} ${it.unit}`; ul.appendChild(li); });
+    if (o.notes) d.querySelector(".nt").textContent = "Note: " + o.notes;
+    const act = d.querySelector(".actions");
+    if (NEXT[o.status]) act.appendChild(btn(NEXT[o.status][1], "primary", () => S.setStatus(o.id, NEXT[o.status][0])));
+    if (o.status === "ready") contactLinks(o).forEach(a => act.appendChild(a));
+    d.id = "o-" + o.id;
+    if (["new", "prepping"].includes(o.status)) act.appendChild(btn("Cancel", "danger", () => S.setStatus(o.id, "cancelled")));
+    if (["done", "cancelled"].includes(o.status)) act.appendChild(btn("Reopen", "", () => S.setStatus(o.id, "new")));
+    box.appendChild(d);
+  });
+  if (focusId && !render.scrolled) {
+    const el = document.getElementById("o-" + focusId);
+    if (el) { el.scrollIntoView({ block: "center" }); render.scrolled = true; }
+  }
+  setTimeout(() => flashIds.clear(), 4000);
+}
+function btn(t, cls, fn) {
+  const b = document.createElement("button"); b.textContent = t; if (cls) b.className = cls;
+  b.onclick = async () => { b.disabled = true; try { await fn(); } catch { toast("Couldn't update – try again."); b.disabled = false; } };
+  return b;
+}
+$("tabs").onclick = e => {
+  const f = e.target.dataset.f; if (!f) return;
+  filter = f; [...$("tabs").children].forEach(b => b.classList.toggle("on", b.dataset.f === f)); render();
+};
+
+// ---------- menu editor ----------
+async function loadMenuEditor() {
+  const items = await S.getMenu();
+  $("menuRows").innerHTML = "";
+  items.forEach(addRow);
+}
+function addRow(m = { name: "", unit: "lb", cuts: ["Diced"], available: true }) {
+  const r = document.createElement("div"); r.className = "menu-row";
+  r.innerHTML = `<input class="n" placeholder="Vegetable"><select class="u"><option>lb</option><option>pack</option><option>kg</option><option>cup</option></select>
+    <input class="c" placeholder="Diced, Sliced"><label style="margin:0"><input type="checkbox" class="a" style="width:auto"> Available</label><button class="danger x">Remove</button>`;
+  r.querySelector(".n").value = m.name; r.querySelector(".u").value = m.unit;
+  r.querySelector(".c").value = m.cuts.join(", "); r.querySelector(".a").checked = m.available !== false;
+  r.querySelector(".x").onclick = () => r.remove();
+  $("menuRows").appendChild(r);
+}
+$("addVeg").onclick = () => addRow();
+$("saveMenu").onclick = async () => {
+  const items = [...$("menuRows").children].map(r => ({
+    name: r.querySelector(".n").value.trim(), unit: r.querySelector(".u").value,
+    cuts: r.querySelector(".c").value.split(",").map(s => s.trim()).filter(Boolean),
+    available: r.querySelector(".a").checked
+  })).filter(m => m.name && m.cuts.length);
+  try { await S.saveMenu(items); $("menuMsg").textContent = "Saved ✓"; }
+  catch { $("menuMsg").textContent = "Couldn't save – are you signed in?"; }
+  setTimeout(() => ($("menuMsg").textContent = ""), 3000);
+};
+</script>
+</body>
+</html>

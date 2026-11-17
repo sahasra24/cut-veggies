@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Order Fresh Cut Veggies</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1 id="shopName">Fresh Cut Veggies</h1>
+  <a href="kitchen.html">Staff</a>
+</header>
+<main>
+  <div id="demo" class="banner hidden">Demo mode: orders are only saved in this browser. Add your free Firebase settings in <code>config.js</code> to go live.</div>
+
+  <!-- ORDER FORM -->
+  <section id="formView">
+    <div class="card">
+      <h2>Pick your veggies</h2>
+      <p class="muted">We cut everything fresh for your order, so we only cut what you ask for.</p>
+      <div id="menu"></div>
+    </div>
+
+    <div class="card">
+      <h2>Pickup details</h2>
+      <div class="row">
+        <div><label for="name">Your name</label><input id="name" maxlength="60" autocomplete="name"></div>
+        <div><label for="phone">Phone</label><input id="phone" maxlength="20" inputmode="tel" autocomplete="tel"></div>
+      </div>
+      <div class="row">
+        <div><label for="date">Pickup date</label><input id="date" type="date"></div>
+        <div><label for="time">Pickup time</label><input id="time" type="time" step="900"></div>
+      </div>
+      <label for="notes">Notes (optional)</label>
+      <textarea id="notes" maxlength="300" placeholder="e.g. small dice for onions, no seeds in peppers"></textarea>
+    </div>
+
+    <div class="card total">
+      <div><b id="count">0 items</b><div class="muted" id="hint">Add at least one item</div></div>
+      <button class="primary" id="submit" disabled>Place order</button>
+    </div>
+    <div class="err" id="err"></div>
+  </section>
+
+  <!-- CONFIRMATION / STATUS -->
+  <section id="statusView" class="hidden">
+    <div class="card" style="text-align:center">
+      <p class="muted">Your pickup code</p>
+      <div class="code" id="code">----</div>
+      <p><span class="pill" id="status">New</span></p>
+      <p id="when" class="muted"></p>
+      <p class="muted">Keep this page open or bookmark it to see when your order is ready.</p>
+    </div>
+    <div class="card">
+      <h2>Your order</h2>
+      <ul id="summary"></ul>
+      <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="danger" id="cancel">Cancel order</button>
+        <button id="another">Place another order</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+import * as S from "./store.js";
+import { SHOP } from "./config.js";
+
+const $ = id => document.getElementById(id);
+const LABEL = { new: "Received", prepping: "Being cut", ready: "Ready for pickup", done: "Picked up", cancelled: "Cancelled" };
+let menu = [], cart = {}; // key "i|cut" -> qty
+
+await S.init();
+if (S.getMode() === "demo") $("demo").classList.remove("hidden");
+$("shopName").textContent = SHOP.name;
+document.title = "Order – " + SHOP.name;
+
+// date limits
+const today = new Date();
+const max = new Date(); max.setDate(max.getDate() + SHOP.maxDaysAhead);
+$("date").min = S.todayStr(today); $("date").max = S.todayStr(max); $("date").value = S.todayStr(today);
+$("time").min = SHOP.openTime; $("time").max = SHOP.closeTime;
+
+// restore customer's details
+try { const me = JSON.parse(localStorage.getItem("cv_me") || "{}"); $("name").value = me.name || ""; $("phone").value = me.phone || ""; } catch {}
+
+// if an order id is in the URL, show its status
+const existing = location.hash.slice(1);
+if (existing) showStatus(existing); else loadMenu();
+
+async function loadMenu() {
+  menu = (await S.getMenu()).filter(m => m.available !== false);
+  const box = $("menu");
+  box.innerHTML = "";
+  if (!menu.length) { box.innerHTML = '<p class="muted">No items available right now.</p>'; return; }
+  menu.forEach((m, i) => {
+    const row = document.createElement("div");
+    row.className = "veg";
+    const name = document.createElement("div");
+    name.innerHTML = `<div class="name"></div><div class="muted">per ${m.unit}</div>`;
+    name.querySelector(".name").textContent = m.name;
+    const cut = document.createElement("select");
+    cut.setAttribute("aria-label", m.name + " cut");
+    m.cuts.forEach(c => { const o = document.createElement("option"); o.textContent = c; cut.appendChild(o); });
+    const q = document.createElement("div");
+    q.className = "qty";
+    const step = m.unit === "lb" ? 0.5 : 1;
+    q.innerHTML = `<button type="button" aria-label="less">−</button><input type="number" min="0" step="${step}" value="0" aria-label="${m.name} quantity"><button type="button" aria-label="more">+</button>`;
+    const [minus, input, plus] = q.children;
+    let lastKey = `${i}|${cut.value}`;
+    const sync = () => {
+      let v = Math.max(0, Math.round((parseFloat(input.value) || 0) / step) * step);
+      input.value = v;
+      delete cart[lastKey];
+      lastKey = `${i}|${cut.value}`;
+      if (v > 0) cart[lastKey] = v;
+      updateTotal();
+    };
+    minus.onclick = () => { input.value = (parseFloat(input.value) || 0) - step; sync(); };
+    plus.onclick = () => { input.value = (parseFloat(input.value) || 0) + step; sync(); };
+    input.onchange = sync; cut.onchange = sync;
+    row.append(name, cut, q);
+    box.appendChild(row);
+  });
+}
+
+function updateTotal() {
+  const n = Object.keys(cart).length;
+  $("count").textContent = n === 1 ? "1 item" : `${n} items`;
+  $("hint").textContent = n ? "We'll start cutting when we receive it" : "Add at least one item";
+  $("submit").disabled = n === 0;
+}
+
+function validate() {
+  const name = $("name").value.trim(), phone = $("phone").value.trim();
+  const date = $("date").value, time = $("time").value;
+  if (!name) return "Please enter your name.";
+  if (phone.replace(/\D/g, "").length < 7) return "Please enter a phone number we can call.";
+  if (!date || !time) return "Please choose a pickup date and time.";
+  if (time < SHOP.openTime || time > SHOP.closeTime) return `Pickup time must be between ${SHOP.openTime} and ${SHOP.closeTime}.`;
+  const when = new Date(`${date}T${time}`);
+  if (when - new Date() < SHOP.minLeadMinutes * 60000) return `Please give us at least ${SHOP.minLeadMinutes} minutes to cut your order.`;
+  return null;
+}
+
+$("submit").onclick = async () => {
+  const e = validate();
+  $("err").textContent = e || "";
+  if (e) return;
+  $("submit").disabled = true; $("submit").textContent = "Sending…";
+  const items = Object.entries(cart).map(([k, qty]) => {
+    const [i, cut] = [Number(k.split("|")[0]), k.split("|").slice(1).join("|")];
+    return { veg: menu[i].name, cut, qty, unit: menu[i].unit };
+  });
+  const order = {
+    name: $("name").value.trim(), phone: $("phone").value.trim(),
+    pickupDate: $("date").value, pickupTime: $("time").value,
+    notes: $("notes").value.trim(), items
+  };
+  try {
+    localStorage.setItem("cv_me", JSON.stringify({ name: order.name, phone: order.phone }));
+    try { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission(); } catch {}
+    const { id, code } = await S.placeOrder(order);
+    S.notifyOwner({ ...order, code }, id);
+    location.hash = id;
+    showStatus(id);
+  } catch (err) {
+    $("err").textContent = "Couldn't send your order. Please try again or call the store.";
+    $("submit").disabled = false; $("submit").textContent = "Place order";
+  }
+};
+
+let unwatch = null;
+function showStatus(id) {
+  $("formView").classList.add("hidden");
+  $("statusView").classList.remove("hidden");
+  unwatch && unwatch();
+  let lastStatus = null;
+  unwatch = S.watchOrder(id, o => {
+    if (o && lastStatus && lastStatus !== "ready" && o.status === "ready") {
+      document.title = "✅ Ready – " + SHOP.name;
+      try { new Notification("Your cut veggies are ready!", { body: `Pickup code ${o.code}` }); } catch {}
+      try { navigator.vibrate && navigator.vibrate(200); } catch {}
+    }
+    if (o) lastStatus = o.status;
+    if (!o) { $("code").textContent = "----"; $("status").textContent = "Order not found"; $("status").className = "pill s-cancelled"; $("cancel").classList.add("hidden"); return; }
+    $("code").textContent = o.code;
+    $("status").textContent = LABEL[o.status] || o.status;
+    $("status").className = "pill s-" + o.status;
+    $("when").textContent = `Pickup ${o.pickupDate} at ${o.pickupTime} · ${o.name}`;
+    const ul = $("summary"); ul.innerHTML = "";
+    o.items.forEach(it => { const li = document.createElement("li"); li.textContent = `${it.veg} – ${it.cut} – ${it.qty} ${it.unit}`; ul.appendChild(li); });
+    if (o.notes) { const li = document.createElement("li"); li.textContent = "Note: " + o.notes; ul.appendChild(li); }
+    $("cancel").classList.toggle("hidden", o.status !== "new");
+  });
+  $("cancel").onclick = async () => {
+    $("cancel").disabled = true;
+    try { await S.cancelOrder(id); } catch { $("cancel").disabled = false; }
+  };
+}
+
+$("another").onclick = () => { history.replaceState(null, "", location.pathname); location.reload(); };
+</script>
+</body>
+</html>
