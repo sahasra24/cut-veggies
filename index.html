@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
 <header>
@@ -41,8 +41,9 @@
       </div>
       <div class="row">
         <div><label for="date">Pickup date</label><input id="date" type="date"></div>
-        <div><label for="time">Pickup time</label><input id="time" type="time" step="900"></div>
+        <div><label for="time">Pickup time</label><select id="time"></select></div>
       </div>
+      <div class="muted" id="timeNote" style="margin-top:6px"></div>
       <label for="notes">Notes (optional)</label>
       <textarea id="notes" maxlength="300" placeholder="e.g. small dice for onions, no seeds in peppers"></textarea>
     </div>
@@ -79,15 +80,15 @@
 
 <div class="cartbar" id="cartbar">
   <div class="in">
-    <div><div class="sum" id="count">0 items</div><div class="amt" id="total">$0.00</div></div>
+    <div><div class="sum" id="count">0 items</div><div class="amt" id="total">$0.00</div><div class="err" id="barErr"></div></div>
     <button class="primary big" id="submit" disabled>Place order</button>
   </div>
 </div>
 
 <script>addEventListener("error", () => document.getElementById("loadErr").classList.remove("hidden"));</script>
 <script type="module">
-import * as S from "./store.js?v=10";
-import { SHOP } from "./config.js?v=10";
+import * as S from "./store.js?v=11";
+import { SHOP } from "./config.js?v=11";
 
 const $ = id => document.getElementById(id);
 const LABEL = { new: "Received", prepping: "Being cut", ready: "Ready for pickup", done: "Picked up", cancelled: "Cancelled" };
@@ -104,7 +105,38 @@ $("leadChip").textContent = `⏱️ Ready in ${SHOP.minLeadMinutes} min`;
 const today = new Date();
 const max = new Date(); max.setDate(max.getDate() + SHOP.maxDaysAhead);
 $("date").min = S.todayStr(today); $("date").max = S.todayStr(max); $("date").value = S.todayStr(today);
-$("time").min = SHOP.openTime; $("time").max = SHOP.closeTime;
+// Pickup times: only slots customers can actually choose (shop hours, every 15 min, enough time to cut).
+const z2 = n => String(n).padStart(2, "0");
+const toMin = t => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+const niceTime = m => new Date(2000, 0, 1, Math.floor(m / 60), m % 60).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+function slotsFor(date) {
+  const out = [], now = new Date();
+  for (let m = toMin(SHOP.openTime); m <= toMin(SHOP.closeTime); m += 15) {
+    const v = `${z2(Math.floor(m / 60))}:${z2(m % 60)}`;
+    if (new Date(`${date}T${v}`) - now >= SHOP.minLeadMinutes * 60000) out.push([v, niceTime(m)]);
+  }
+  return out;
+}
+function fillTimes() {
+  let slots = slotsFor($("date").value);
+  $("timeNote").textContent = "";
+  if (!slots.length && $("date").value === S.todayStr()) {
+    const t = new Date(); t.setDate(t.getDate() + 1);
+    $("date").value = S.todayStr(t);
+    slots = slotsFor($("date").value);
+    $("timeNote").textContent = "No more pickup times today, so we've picked tomorrow for you.";
+  }
+  const sel = $("time"), prev = sel.value;
+  sel.innerHTML = "";
+  if (!slots.length) { const o = document.createElement("option"); o.value = ""; o.textContent = "No times available"; sel.appendChild(o); return; }
+  slots.forEach(([v, label]) => { const o = document.createElement("option"); o.value = v; o.textContent = label; sel.appendChild(o); });
+  if (slots.some(s => s[0] === prev)) sel.value = prev;
+}
+$("date").onchange = () => { fillTimes(); showErr(""); };
+$("time").onchange = () => showErr("");
+fillTimes();
+setInterval(fillTimes, 60000); // drop times that have become too soon while the page is open
+function showErr(t) { $("err").textContent = t; $("barErr").textContent = t; }
 
 // restore customer's details
 try { const me = JSON.parse(localStorage.getItem("cv_me") || "{}"); $("name").value = me.name || ""; $("phone").value = me.phone || ""; } catch {}
@@ -197,13 +229,13 @@ function validate() {
   if (!date || !time) return "Please choose a pickup date and time.";
   if (time < SHOP.openTime || time > SHOP.closeTime) return `Pickup time must be between ${SHOP.openTime} and ${SHOP.closeTime}.`;
   const when = new Date(`${date}T${time}`);
-  if (when - new Date() < SHOP.minLeadMinutes * 60000) return `Please give us at least ${SHOP.minLeadMinutes} minutes to cut your order.`;
+  if (when - new Date() < SHOP.minLeadMinutes * 60000) { fillTimes(); return `That time is too soon – please pick another pickup time (we need ${SHOP.minLeadMinutes} minutes to cut).`; }
   return null;
 }
 
 $("submit").onclick = async () => {
   const e = validate();
-  $("err").textContent = e || "";
+  showErr(e || "");
   if (e) { $("err").scrollIntoView({ block: "center", behavior: "smooth" }); return; }
   $("submit").disabled = true; $("submit").textContent = "Sending…";
   const items = cartItems();
@@ -222,7 +254,7 @@ $("submit").onclick = async () => {
     location.hash = id;
     showStatus(id);
   } catch (err) {
-    $("err").textContent = "Couldn't send your order. Please try again or call the store.";
+    showErr("Couldn't send your order. Please try again or call the store.");
     $("submit").disabled = false; $("submit").textContent = "Place order";
   }
 };

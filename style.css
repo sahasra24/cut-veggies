@@ -76,6 +76,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none}
 .cartbar.show{transform:none}
 .cartbar .in{max-width:1000px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px}
 .cartbar .sum{font-size:13px;color:var(--muted)}
+.cartbar .err{margin:2px 0 0;font-size:13px;max-width:60vw}
 .cartbar .amt{font-size:22px;font-weight:800;color:var(--ink);letter-spacing:-.01em}
 
 /* bill / summary */
