@@ -1,8 +1,9 @@
 // Data layer: Firebase (live, free Spark plan) or DEMO (localStorage, this browser only).
 // Read config as a namespace so a missing setting can never stop the page from loading.
 // Keep ?v= the same as in index.html / kitchen.html and bump it on every update.
-import * as C from "./config.js?v=8";
+import * as C from "./config.js?v=9";
 const { FIREBASE, DEFAULT_MENU, NTFY_TOPIC } = C;
+const WHATSAPP_STAFF = Array.isArray(C.WHATSAPP_STAFF) ? C.WHATSAPP_STAFF : [];
 const SHOP = C.SHOP || {};
 const FIREBASE_UNTIL = C.FIREBASE_UNTIL || null;
 
@@ -89,9 +90,23 @@ export async function placeOrder(o) {
 
 // Free push to the owner's phone through the ntfy app. Never blocks the order.
 export async function notifyOwner(order, id) {
-  if (!NTFY_TOPIC) return;
   const items = order.items.map(i => `${i.veg} ${i.cut.toLowerCase()} ${i.qty} ${i.unit}`).join(", ") + (order.total != null ? ` · Total ${money(order.total)}` : "");
   const kitchen = new URL("kitchen.html#" + id, location.href).href;
+
+  // WhatsApp to each staff phone (CallMeBot). The response can't be read cross-site, so send and forget.
+  const wa = [
+    `🥕 New order – ${order.name} (code ${order.code})`,
+    items,
+    `Pickup ${order.pickupDate} ${order.pickupTime}`,
+    order.phone ? `Phone ${order.phone}` : "",
+    order.notes ? `Note: ${order.notes}` : "",
+    kitchen
+  ].filter(Boolean).join(String.fromCharCode(10)); // one item per line
+  await Promise.all(WHATSAPP_STAFF.filter(s => s && s.phone && s.apikey).map(s =>
+    fetch(`https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(s.phone)}&text=${encodeURIComponent(wa)}&apikey=${encodeURIComponent(s.apikey)}`,
+      { mode: "no-cors" }).catch(() => {})));
+
+  if (!NTFY_TOPIC) return;
   try {
     await fetch("https://ntfy.sh/", { // JSON publish goes to the root URL
       method: "POST",

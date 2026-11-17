@@ -29,6 +29,13 @@ export const FIREBASE = {
 // Pick a long, hard-to-guess name (anyone who knows it can see the alerts). null = off.
 export const NTFY_TOPIC = null; // e.g. "freshcut-orders-k82jd9q"
 
+// Free WhatsApp alert to staff for every new order, via CallMeBot (https://www.callmebot.com).
+// Each staff phone does a one-time setup to get its own apikey. Add one entry per phone.
+// phone = full number with country code, e.g. "+15551234567". [] = off.
+export const WHATSAPP_STAFF = [
+  // { phone: "+15551234567", apikey: "123456" }
+];
+
 export const SHOP = {
   name: "Fresh Cut Veggies",
   currency: "USD",       // prices shown in this currency
