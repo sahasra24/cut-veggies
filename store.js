@@ -1,7 +1,7 @@
 // Data layer: Firebase (live, free Spark plan) or DEMO (localStorage, this browser only).
 // Read config as a namespace so a missing setting can never stop the page from loading.
 // Keep ?v= the same as in index.html / kitchen.html and bump it on every update.
-import * as C from "./config.js?v=5";
+import * as C from "./config.js?v=7";
 const { FIREBASE, DEFAULT_MENU, NTFY_TOPIC } = C;
 const SHOP = C.SHOP || {};
 const FIREBASE_UNTIL = C.FIREBASE_UNTIL || null;
@@ -62,8 +62,10 @@ function withPrices(items) {
 }
 export async function getMenu() {
   if (mode === "demo") return withPrices(lsGet(LS.menu, DEFAULT_MENU));
-  const s = await fb.f.getDoc(fb.f.doc(fb.db, "settings", "menu"));
-  return withPrices(s.exists() ? s.data().items : DEFAULT_MENU);
+  try {
+    const s = await fb.f.getDoc(fb.f.doc(fb.db, "settings", "menu"));
+    return withPrices(s.exists() ? s.data().items : DEFAULT_MENU);
+  } catch { return withPrices(DEFAULT_MENU); } // e.g. rules not published yet
 }
 export async function saveMenu(items) {
   if (mode === "demo") return lsSet(LS.menu, items);

@@ -2,10 +2,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // CHANGE THIS: emails of staff who can see and update orders
+    // Staff who can see and update orders (add more emails to this list)
     function isStaff() {
       return request.auth != null
-        && request.auth.token.email in ['owner@example.com', 'staff@example.com'];
+        && request.auth.token.email in ['skoppal@gitam.in'];
     }
 
     match /settings/menu {
