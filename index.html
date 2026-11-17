@@ -2,14 +2,25 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2e7d32">
 <title>Order Fresh Cut Veggies</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
-  <h1 id="shopName">Fresh Cut Veggies</h1>
-  <a href="kitchen.html">Staff</a>
+  <div class="bar">
+    <div class="brand"><div class="logo">🥕</div><div><h1 id="shopName">Fresh Cut Veggies</h1><div class="sub">Cut fresh, just for you</div></div></div>
+    <a href="kitchen.html">Staff</a>
+  </div>
+  <div class="hero" id="hero">
+    <h2>Fresh vegetables,<br>cut the way you like.</h2>
+    <p>Pick your veggies and how you want them cut, choose a pickup time, and we'll have them ready.</p>
+    <div class="chips"><span>🔪 Cut to order</span><span>🌱 No waste</span><span id="leadChip">⏱️ Ready in 60 min</span></div>
+  </div>
 </header>
 <main>
   <div id="demo" class="banner hidden">Demo mode: orders are only saved in this browser. Add your free Firebase settings in <code>config.js</code> to go live.</div>
@@ -17,13 +28,12 @@
   <!-- ORDER FORM -->
   <section id="formView">
     <div class="card">
-      <h2>Pick your veggies</h2>
-      <p class="muted">We cut everything fresh for your order, so we only cut what you ask for.</p>
-      <div id="menu"></div>
+      <div class="section-title"><h2>1. Pick your veggies</h2><span class="muted">Prices are per lb or per pack</span></div>
+      <div id="menu" class="menu-grid"></div>
     </div>
 
     <div class="card">
-      <h2>Pickup details</h2>
+      <h2>2. Pickup details</h2>
       <div class="row">
         <div><label for="name">Your name</label><input id="name" maxlength="60" autocomplete="name"></div>
         <div><label for="phone">Phone</label><input id="phone" maxlength="20" inputmode="tel" autocomplete="tel"></div>
@@ -36,9 +46,10 @@
       <textarea id="notes" maxlength="300" placeholder="e.g. small dice for onions, no seeds in peppers"></textarea>
     </div>
 
-    <div class="card total">
-      <div><b id="count">0 items</b><div class="muted" id="hint">Add at least one item</div></div>
-      <button class="primary" id="submit" disabled>Place order</button>
+    <div class="card" id="reviewCard">
+      <h2>3. Your order</h2>
+      <table class="bill"><tbody id="review"></tbody></table>
+      <p class="muted" style="margin:10px 0 0">You pay at pickup.</p>
     </div>
     <div class="err" id="err"></div>
   </section>
@@ -46,16 +57,18 @@
   <!-- CONFIRMATION / STATUS -->
   <section id="statusView" class="hidden">
     <div class="card" style="text-align:center">
-      <p class="muted">Your pickup code</p>
+      <p class="muted" style="margin:0 0 4px">Your pickup code</p>
       <div class="code" id="code">----</div>
-      <p><span class="pill" id="status">New</span></p>
+      <div><span class="pill" id="status">New</span></div>
+      <div class="steps" id="steps"><span data-s="new">Received</span><span data-s="prepping">Cutting</span><span data-s="ready">Ready</span><span data-s="done">Picked up</span></div>
       <p id="when" class="muted"></p>
       <p class="muted">Keep this page open or bookmark it to see when your order is ready.</p>
     </div>
     <div class="card">
       <h2>Your order</h2>
-      <ul id="summary"></ul>
-      <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap">
+      <table class="bill"><tbody id="summary"></tbody></table>
+      <p class="muted" id="sumNote"></p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
         <button class="danger" id="cancel">Cancel order</button>
         <button id="another">Place another order</button>
       </div>
@@ -63,18 +76,27 @@
   </section>
 </main>
 
+<div class="cartbar" id="cartbar">
+  <div class="in">
+    <div><div class="sum" id="count">0 items</div><div class="amt" id="total">$0.00</div></div>
+    <button class="primary big" id="submit" disabled>Place order</button>
+  </div>
+</div>
+
 <script type="module">
 import * as S from "./store.js";
 import { SHOP } from "./config.js";
 
 const $ = id => document.getElementById(id);
 const LABEL = { new: "Received", prepping: "Being cut", ready: "Ready for pickup", done: "Picked up", cancelled: "Cancelled" };
-let menu = [], cart = {}; // key "i|cut" -> qty
+const ORDER = ["new", "prepping", "ready", "done"];
+let menu = [], cart = {}; // row index -> { cut, qty }
 
 await S.init();
 if (S.getMode() === "demo") $("demo").classList.remove("hidden");
 $("shopName").textContent = SHOP.name;
 document.title = "Order – " + SHOP.name;
+$("leadChip").textContent = `⏱️ Ready in ${SHOP.minLeadMinutes} min`;
 
 // date limits
 const today = new Date();
@@ -95,41 +117,74 @@ async function loadMenu() {
   box.innerHTML = "";
   if (!menu.length) { box.innerHTML = '<p class="muted">No items available right now.</p>'; return; }
   menu.forEach((m, i) => {
-    const row = document.createElement("div");
-    row.className = "veg";
-    const name = document.createElement("div");
-    name.innerHTML = `<div class="name"></div><div class="muted">per ${m.unit}</div>`;
-    name.querySelector(".name").textContent = m.name;
-    const cut = document.createElement("select");
+    const card = document.createElement("div");
+    card.className = "veg";
+    card.innerHTML = `<div class="head"><div class="icon"></div><div><div class="name"></div><div class="price"><span class="p"></span> <small></small></div></div></div>
+      <div class="controls"><select></select><div class="qty"><button type="button" aria-label="less">−</button><input type="number" min="0" value="0"><button type="button" aria-label="more">+</button></div></div>
+      <div class="line"><span class="lq"></span><b class="lt"></b></div>`;
+    card.querySelector(".icon").textContent = S.vegIcon(m.name);
+    card.querySelector(".name").textContent = m.name;
+    card.querySelector(".p").textContent = S.money(m.price);
+    card.querySelector("small").textContent = "/ " + m.unit;
+    const cut = card.querySelector("select");
     cut.setAttribute("aria-label", m.name + " cut");
     m.cuts.forEach(c => { const o = document.createElement("option"); o.textContent = c; cut.appendChild(o); });
-    const q = document.createElement("div");
-    q.className = "qty";
-    const step = m.unit === "lb" ? 0.5 : 1;
-    q.innerHTML = `<button type="button" aria-label="less">−</button><input type="number" min="0" step="${step}" value="0" aria-label="${m.name} quantity"><button type="button" aria-label="more">+</button>`;
-    const [minus, input, plus] = q.children;
-    let lastKey = `${i}|${cut.value}`;
+    const [minus, input, plus] = card.querySelector(".qty").children;
+    const step = m.unit === "lb" || m.unit === "kg" ? 0.5 : 1;
+    input.step = step; input.setAttribute("aria-label", m.name + " quantity");
     const sync = () => {
-      let v = Math.max(0, Math.round((parseFloat(input.value) || 0) / step) * step);
+      const v = Math.max(0, Math.round((parseFloat(input.value) || 0) / step) * step);
       input.value = v;
-      delete cart[lastKey];
-      lastKey = `${i}|${cut.value}`;
-      if (v > 0) cart[lastKey] = v;
+      if (v > 0) cart[i] = { cut: cut.value, qty: v }; else delete cart[i];
+      card.classList.toggle("picked", v > 0);
+      card.querySelector(".lq").textContent = v > 0 ? `${v} ${m.unit} × ${S.money(m.price)}` : "";
+      card.querySelector(".lt").textContent = v > 0 ? S.money(v * m.price) : "";
       updateTotal();
     };
     minus.onclick = () => { input.value = (parseFloat(input.value) || 0) - step; sync(); };
     plus.onclick = () => { input.value = (parseFloat(input.value) || 0) + step; sync(); };
     input.onchange = sync; cut.onchange = sync;
-    row.append(name, cut, q);
-    box.appendChild(row);
+    box.appendChild(card);
+  });
+  updateTotal();
+}
+
+function cartItems() {
+  return Object.entries(cart).map(([i, c]) => {
+    const m = menu[i];
+    return { veg: m.name, cut: c.cut, qty: c.qty, unit: m.unit, price: S.round2(m.price), lineTotal: S.round2(c.qty * m.price) };
   });
 }
 
+function fillBill(tbody, items, total) {
+  tbody.innerHTML = "";
+  items.forEach(it => {
+    const tr = document.createElement("tr");
+    const a = document.createElement("td"), b = document.createElement("td");
+    a.innerHTML = `<div></div><div class="muted"></div>`;
+    a.firstChild.textContent = `${S.vegIcon(it.veg)} ${it.veg} – ${it.cut}`;
+    a.lastChild.textContent = it.price != null ? `${it.qty} ${it.unit} × ${S.money(it.price)}` : `${it.qty} ${it.unit}`;
+    b.textContent = it.lineTotal != null ? S.money(it.lineTotal) : "";
+    tr.append(a, b); tbody.appendChild(tr);
+  });
+  if (total != null) {
+    const tr = document.createElement("tr"); tr.className = "total";
+    tr.innerHTML = "<td>Total</td><td></td>"; tr.lastChild.textContent = S.money(total);
+    tbody.appendChild(tr);
+  }
+}
+
 function updateTotal() {
-  const n = Object.keys(cart).length;
+  const items = cartItems();
+  const n = items.length;
+  const total = S.round2(items.reduce((s, it) => s + it.lineTotal, 0));
   $("count").textContent = n === 1 ? "1 item" : `${n} items`;
-  $("hint").textContent = n ? "We'll start cutting when we receive it" : "Add at least one item";
+  $("total").textContent = S.money(total);
   $("submit").disabled = n === 0;
+  $("cartbar").classList.toggle("show", n > 0);
+  document.body.classList.toggle("has-cart", n > 0);
+  $("reviewCard").classList.toggle("hidden", n === 0);
+  fillBill($("review"), items, total);
 }
 
 function validate() {
@@ -147,16 +202,15 @@ function validate() {
 $("submit").onclick = async () => {
   const e = validate();
   $("err").textContent = e || "";
-  if (e) return;
+  if (e) { $("err").scrollIntoView({ block: "center", behavior: "smooth" }); return; }
   $("submit").disabled = true; $("submit").textContent = "Sending…";
-  const items = Object.entries(cart).map(([k, qty]) => {
-    const [i, cut] = [Number(k.split("|")[0]), k.split("|").slice(1).join("|")];
-    return { veg: menu[i].name, cut, qty, unit: menu[i].unit };
-  });
+  const items = cartItems();
   const order = {
     name: $("name").value.trim(), phone: $("phone").value.trim(),
     pickupDate: $("date").value, pickupTime: $("time").value,
-    notes: $("notes").value.trim(), items
+    notes: $("notes").value.trim(), items,
+    total: S.round2(items.reduce((s, it) => s + it.lineTotal, 0)),
+    currency: SHOP.currency || "USD"
   };
   try {
     localStorage.setItem("cv_me", JSON.stringify({ name: order.name, phone: order.phone }));
@@ -174,7 +228,11 @@ $("submit").onclick = async () => {
 let unwatch = null;
 function showStatus(id) {
   $("formView").classList.add("hidden");
+  $("hero").classList.add("hidden");
+  $("cartbar").classList.remove("show");
+  document.body.classList.remove("has-cart");
   $("statusView").classList.remove("hidden");
+  window.scrollTo(0, 0);
   unwatch && unwatch();
   let lastStatus = null;
   unwatch = S.watchOrder(id, o => {
@@ -184,14 +242,16 @@ function showStatus(id) {
       try { navigator.vibrate && navigator.vibrate(200); } catch {}
     }
     if (o) lastStatus = o.status;
-    if (!o) { $("code").textContent = "----"; $("status").textContent = "Order not found"; $("status").className = "pill s-cancelled"; $("cancel").classList.add("hidden"); return; }
+    if (!o) { $("code").textContent = "----"; $("status").textContent = "Order not found"; $("status").className = "pill s-cancelled"; $("cancel").classList.add("hidden"); $("steps").classList.add("hidden"); return; }
     $("code").textContent = o.code;
     $("status").textContent = LABEL[o.status] || o.status;
     $("status").className = "pill s-" + o.status;
+    const at = ORDER.indexOf(o.status);
+    $("steps").classList.toggle("hidden", at < 0);
+    [...$("steps").children].forEach(s => s.classList.toggle("on", ORDER.indexOf(s.dataset.s) <= at));
     $("when").textContent = `Pickup ${o.pickupDate} at ${o.pickupTime} · ${o.name}`;
-    const ul = $("summary"); ul.innerHTML = "";
-    o.items.forEach(it => { const li = document.createElement("li"); li.textContent = `${it.veg} – ${it.cut} – ${it.qty} ${it.unit}`; ul.appendChild(li); });
-    if (o.notes) { const li = document.createElement("li"); li.textContent = "Note: " + o.notes; ul.appendChild(li); }
+    fillBill($("summary"), o.items, o.total);
+    $("sumNote").textContent = (o.notes ? "Note: " + o.notes + " · " : "") + (o.total != null ? "Pay at pickup." : "");
     $("cancel").classList.toggle("hidden", o.status !== "new");
   });
   $("cancel").onclick = async () => {

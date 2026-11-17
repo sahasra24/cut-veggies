@@ -4,23 +4,29 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Kitchen – Cut Veggie Orders</title>
+<meta name="theme-color" content="#2e7d32">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
-  <h1>Kitchen orders</h1>
-  <div><a href="index.html">Order page</a> &nbsp; <button class="link hidden" id="out">Sign out</button></div>
+  <div class="bar">
+    <div class="brand"><div class="logo">🔪</div><div><h1>Kitchen orders</h1><div class="sub" id="shopSub">Staff board</div></div></div>
+    <div style="display:flex;gap:8px"><a href="index.html">Order page</a><button class="link hidden" id="out">Sign out</button></div>
+  </div>
 </header>
 <main>
   <div id="demo" class="banner hidden">Demo mode: orders are only saved in this browser. Open the Order page in another tab to test.</div>
 
   <!-- SIGN IN -->
-  <section id="login" class="card hidden" style="max-width:420px;margin:30px auto">
+  <section id="login" class="card hidden login-wrap">
     <h2>Staff sign in</h2>
     <label for="email">Email</label><input id="email" type="email" autocomplete="username">
     <label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password">
     <p class="muted" id="demoHint"></p>
-    <button class="primary" id="signin" style="margin-top:10px">Sign in</button>
+    <button class="primary big" id="signin" style="margin-top:10px;width:100%">Sign in</button>
     <div class="err" id="loginErr"></div>
   </section>
 
@@ -33,13 +39,14 @@
     </div>
 
     <div class="stats">
-      <div class="stat"><span class="muted">New</span><b id="nNew">0</b></div>
-      <div class="stat"><span class="muted">Cutting</span><b id="nPrep">0</b></div>
-      <div class="stat"><span class="muted">Ready</span><b id="nReady">0</b></div>
-      <div class="stat"><span class="muted">Picked up</span><b id="nDone">0</b></div>
+      <div class="stat money"><span class="muted">Sales (this day)</span><b id="sales">$0.00</b></div>
+      <div class="stat" style="--c:#f0a830"><span class="muted">New</span><b id="nNew">0</b></div>
+      <div class="stat" style="--c:#4a86d0"><span class="muted">Cutting</span><b id="nPrep">0</b></div>
+      <div class="stat" style="--c:#43a047"><span class="muted">Ready</span><b id="nReady">0</b></div>
+      <div class="stat" style="--c:#bdbdbd"><span class="muted">Picked up</span><b id="nDone">0</b></div>
     </div>
 
-    <div class="card" style="margin-top:14px">
+    <div class="card">
       <h2>What to cut (still to do)</h2>
       <p class="muted">Totals from orders that are New or Cutting. Cut only this much – no extra, no waste.</p>
       <table><thead><tr><th>Vegetable</th><th>Cut</th><th>Amount</th><th>Orders</th></tr></thead><tbody id="prep"></tbody></table>
@@ -54,14 +61,15 @@
         <button data-f="done">Picked up</button>
         <button data-f="cancelled">Cancelled</button>
       </div>
-      <div id="orders"></div>
+      <div id="orders" class="orders-grid"></div>
     </div>
 
     <details class="card">
-      <summary><b>Edit menu</b> <span class="muted">– vegetables, cuts, availability</span></summary>
-      <p class="muted">Cuts are comma separated. Untick "Available" when you're out of something.</p>
+      <summary><b>Edit menu &amp; prices</b> <span class="muted">– vegetables, prices, cuts, availability</span></summary>
+      <p class="muted">Price is per unit (per lb, per pack…). Cuts are comma separated. Untick "Available" when you're out of something. New prices apply to new orders only.</p>
+      <div class="menu-head"><span>Vegetable</span><span>Unit</span><span>Price</span><span>Cuts</span><span></span><span></span></div>
       <div id="menuRows"></div>
-      <div style="display:flex;gap:8px;margin-top:8px">
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center">
         <button id="addVeg">+ Add vegetable</button>
         <button class="primary" id="saveMenu">Save menu</button>
         <span class="muted" id="menuMsg"></span>
@@ -84,6 +92,7 @@ if (focusId) flashIds.add(focusId);
 await S.init();
 const demo = S.getMode() === "demo";
 if (demo) { $("demo").classList.remove("hidden"); $("demoHint").textContent = "Demo mode: any email/password works."; }
+$("shopSub").textContent = SHOP.name;
 
 S.onStaff(u => {
   $("login").classList.toggle("hidden", !!u);
@@ -159,6 +168,7 @@ function render() {
   const count = s => orders.filter(o => o.status === s).length;
   $("nNew").textContent = count("new"); $("nPrep").textContent = count("prepping");
   $("nReady").textContent = count("ready"); $("nDone").textContent = count("done");
+  $("sales").textContent = S.money(orders.filter(o => o.status !== "cancelled").reduce((s, o) => s + (Number(o.total) || 0), 0));
   document.title = (count("new") ? `(${count("new")}) ` : "") + "Kitchen – Cut Veggie Orders";
 
   // prep totals
@@ -173,7 +183,7 @@ function render() {
   if (!rows.length) tb.innerHTML = '<tr><td colspan="4" class="muted">Nothing to cut right now.</td></tr>';
   rows.forEach(r => {
     const tr = document.createElement("tr");
-    [r.veg, r.cut].forEach(t => { const td = document.createElement("td"); td.textContent = t; tr.appendChild(td); });
+    [`${S.vegIcon(r.veg)} ${r.veg}`, r.cut].forEach(t => { const td = document.createElement("td"); td.textContent = t; tr.appendChild(td); });
     const q = document.createElement("td"); q.className = "num"; q.textContent = `${+r.qty.toFixed(2)} ${r.unit}`; tr.appendChild(q);
     const n = document.createElement("td"); n.textContent = r.n; tr.appendChild(n);
     tb.appendChild(tr);
@@ -185,16 +195,25 @@ function render() {
   if (!shown.length) box.innerHTML = '<p class="muted">No orders here.</p>';
   shown.forEach(o => {
     const d = document.createElement("div");
-    d.className = "order" + (flashIds.has(o.id) ? " flash" : "");
-    d.innerHTML = `<div class="top"><div><b class="nm"></b> <span class="muted ph"></span></div>
-      <div><span class="muted">Pickup <b class="tm"></b> · code <b class="cd"></b></span> <span class="pill s-${o.status}">${LABEL[o.status]}</span></div></div>
-      <ul></ul><div class="muted nt"></div><div class="actions"></div>`;
+    d.className = `order st-${o.status}` + (flashIds.has(o.id) ? " flash" : "");
+    d.innerHTML = `<div class="top"><div><b class="nm"></b><div class="meta ph"></div></div><span class="pill s-${o.status}">${LABEL[o.status]}</span></div>
+      <div class="meta">Pickup <b class="tm"></b> · code <b class="cd"></b></div>
+      <table class="bill"><tbody></tbody></table><div class="muted nt"></div><div class="actions"></div>`;
     d.querySelector(".nm").textContent = o.name;
     d.querySelector(".ph").textContent = o.phone;
     d.querySelector(".tm").textContent = o.pickupTime;
     d.querySelector(".cd").textContent = o.code;
-    const ul = d.querySelector("ul");
-    o.items.forEach(it => { const li = document.createElement("li"); li.textContent = `${it.veg} – ${it.cut} – ${it.qty} ${it.unit}`; ul.appendChild(li); });
+    const tb = d.querySelector("tbody");
+    o.items.forEach(it => {
+      const tr = document.createElement("tr"), a = document.createElement("td"), b = document.createElement("td");
+      a.textContent = `${S.vegIcon(it.veg)} ${it.veg} – ${it.cut} – ${it.qty} ${it.unit}`;
+      b.textContent = it.lineTotal != null ? S.money(it.lineTotal) : "";
+      tr.append(a, b); tb.appendChild(tr);
+    });
+    if (o.total != null) {
+      const tr = document.createElement("tr"); tr.className = "total";
+      tr.innerHTML = "<td>Total</td><td></td>"; tr.lastChild.textContent = S.money(o.total); tb.appendChild(tr);
+    }
     if (o.notes) d.querySelector(".nt").textContent = "Note: " + o.notes;
     const act = d.querySelector(".actions");
     if (NEXT[o.status]) act.appendChild(btn(NEXT[o.status][1], "primary", () => S.setStatus(o.id, NEXT[o.status][0])));
@@ -226,11 +245,13 @@ async function loadMenuEditor() {
   $("menuRows").innerHTML = "";
   items.forEach(addRow);
 }
-function addRow(m = { name: "", unit: "lb", cuts: ["Diced"], available: true }) {
+function addRow(m = { name: "", unit: "lb", price: 0, cuts: ["Diced"], available: true }) {
   const r = document.createElement("div"); r.className = "menu-row";
-  r.innerHTML = `<input class="n" placeholder="Vegetable"><select class="u"><option>lb</option><option>pack</option><option>kg</option><option>cup</option></select>
-    <input class="c" placeholder="Diced, Sliced"><label style="margin:0"><input type="checkbox" class="a" style="width:auto"> Available</label><button class="danger x">Remove</button>`;
+  r.innerHTML = `<input class="n" placeholder="Vegetable" aria-label="Vegetable"><select class="u" aria-label="Unit"><option>lb</option><option>pack</option><option>kg</option><option>cup</option></select>
+    <div class="pricebox"><span>$</span><input class="p" type="number" min="0" step="0.01" inputmode="decimal" aria-label="Price per unit"></div>
+    <input class="c" placeholder="Diced, Sliced" aria-label="Cuts"><label><input type="checkbox" class="a" style="width:auto"> Available</label><button class="danger x">Remove</button>`;
   r.querySelector(".n").value = m.name; r.querySelector(".u").value = m.unit;
+  r.querySelector(".p").value = (Number(m.price) || 0).toFixed(2);
   r.querySelector(".c").value = m.cuts.join(", "); r.querySelector(".a").checked = m.available !== false;
   r.querySelector(".x").onclick = () => r.remove();
   $("menuRows").appendChild(r);
@@ -239,6 +260,7 @@ $("addVeg").onclick = () => addRow();
 $("saveMenu").onclick = async () => {
   const items = [...$("menuRows").children].map(r => ({
     name: r.querySelector(".n").value.trim(), unit: r.querySelector(".u").value,
+    price: S.round2(Math.max(0, parseFloat(r.querySelector(".p").value) || 0)),
     cuts: r.querySelector(".c").value.split(",").map(s => s.trim()).filter(Boolean),
     available: r.querySelector(".a").checked
   })).filter(m => m.name && m.cuts.length);

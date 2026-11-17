@@ -20,6 +20,7 @@ export const NTFY_TOPIC = null; // e.g. "freshcut-orders-k82jd9q"
 
 export const SHOP = {
   name: "Fresh Cut Veggies",
+  currency: "USD",       // prices shown in this currency
   countryCode: "1",       // for WhatsApp links (1 = USA)
   phone: "",              // optional, shown on the order page
   openTime: "09:00",      // earliest pickup time
@@ -29,17 +30,18 @@ export const SHOP = {
 };
 
 // Used only until you save your own menu from the Kitchen page.
+// price = price per unit (per lb, per pack...). Staff can change prices in Kitchen > Edit menu.
 export const DEFAULT_MENU = [
-  { name: "Onion",        unit: "lb",   cuts: ["Diced", "Sliced", "Chopped"], available: true },
-  { name: "Tomato",       unit: "lb",   cuts: ["Diced", "Sliced"], available: true },
-  { name: "Carrot",       unit: "lb",   cuts: ["Diced", "Julienne", "Sliced", "Grated"], available: true },
-  { name: "Bell pepper",  unit: "lb",   cuts: ["Diced", "Strips"], available: true },
-  { name: "Potato",       unit: "lb",   cuts: ["Diced", "Wedges", "Fries"], available: true },
-  { name: "Cabbage",      unit: "lb",   cuts: ["Shredded", "Chopped"], available: true },
-  { name: "Green beans",  unit: "lb",   cuts: ["Chopped (1 inch)", "Fine chopped"], available: true },
-  { name: "Okra",         unit: "lb",   cuts: ["Round slices", "Long cut"], available: true },
-  { name: "Cauliflower",  unit: "lb",   cuts: ["Florets"], available: true },
-  { name: "Broccoli",     unit: "lb",   cuts: ["Florets"], available: true },
-  { name: "Cucumber",     unit: "lb",   cuts: ["Sliced", "Diced"], available: true },
-  { name: "Mixed veg (curry pack)", unit: "pack", cuts: ["Diced"], available: true }
+  { name: "Onion",        unit: "lb", price: 2.49,   cuts: ["Diced", "Sliced", "Chopped"], available: true },
+  { name: "Tomato",       unit: "lb", price: 2.99,   cuts: ["Diced", "Sliced"], available: true },
+  { name: "Carrot",       unit: "lb", price: 2.29,   cuts: ["Diced", "Julienne", "Sliced", "Grated"], available: true },
+  { name: "Bell pepper",  unit: "lb", price: 3.99,   cuts: ["Diced", "Strips"], available: true },
+  { name: "Potato",       unit: "lb", price: 1.99,   cuts: ["Diced", "Wedges", "Fries"], available: true },
+  { name: "Cabbage",      unit: "lb", price: 2.19,   cuts: ["Shredded", "Chopped"], available: true },
+  { name: "Green beans",  unit: "lb", price: 3.49,   cuts: ["Chopped (1 inch)", "Fine chopped"], available: true },
+  { name: "Okra",         unit: "lb", price: 4.49,   cuts: ["Round slices", "Long cut"], available: true },
+  { name: "Cauliflower",  unit: "lb", price: 3.79,   cuts: ["Florets"], available: true },
+  { name: "Broccoli",     unit: "lb", price: 3.99,   cuts: ["Florets"], available: true },
+  { name: "Cucumber",     unit: "lb", price: 2.49,   cuts: ["Sliced", "Diced"], available: true },
+  { name: "Mixed veg (curry pack)", unit: "pack", price: 5.99, cuts: ["Diced"], available: true }
 ];

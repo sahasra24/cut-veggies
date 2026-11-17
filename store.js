@@ -1,5 +1,5 @@
 // Data layer: Firebase (live, free Spark plan) or DEMO (localStorage, this browser only).
-import { FIREBASE, DEFAULT_MENU, NTFY_TOPIC } from "./config.js";
+import { FIREBASE, DEFAULT_MENU, NTFY_TOPIC, SHOP } from "./config.js";
 
 const V = "10.12.2";
 let mode = "demo";
@@ -37,11 +37,26 @@ function lsSet(k, v) { localStorage.setItem(k, JSON.stringify(v)); listeners.for
 window.addEventListener("storage", () => listeners.forEach(fn => fn()));
 function onLocal(fn) { listeners.add(fn); fn(); return () => listeners.delete(fn); }
 
+// ---------- money ----------
+let fmt;
+try { fmt = new Intl.NumberFormat(undefined, { style: "currency", currency: SHOP.currency || "USD" }); }
+catch { fmt = { format: n => "$" + n.toFixed(2) }; }
+export const money = n => fmt.format(Number(n) || 0);
+export const round2 = n => Math.round((Number(n) || 0) * 100) / 100;
+
 // ---------- menu ----------
+// Menus saved before prices existed get the default price for that vegetable.
+function withPrices(items) {
+  return items.map(m => {
+    if (typeof m.price === "number") return m;
+    const d = DEFAULT_MENU.find(x => x.name.toLowerCase() === (m.name || "").toLowerCase());
+    return { ...m, price: d ? d.price : 0 };
+  });
+}
 export async function getMenu() {
-  if (mode === "demo") return lsGet(LS.menu, DEFAULT_MENU);
+  if (mode === "demo") return withPrices(lsGet(LS.menu, DEFAULT_MENU));
   const s = await fb.f.getDoc(fb.f.doc(fb.db, "settings", "menu"));
-  return s.exists() ? s.data().items : DEFAULT_MENU;
+  return withPrices(s.exists() ? s.data().items : DEFAULT_MENU);
 }
 export async function saveMenu(items) {
   if (mode === "demo") return lsSet(LS.menu, items);
@@ -66,7 +81,7 @@ export async function placeOrder(o) {
 // Free push to the owner's phone through the ntfy app. Never blocks the order.
 export async function notifyOwner(order, id) {
   if (!NTFY_TOPIC) return;
-  const items = order.items.map(i => `${i.veg} ${i.cut.toLowerCase()} ${i.qty} ${i.unit}`).join(", ");
+  const items = order.items.map(i => `${i.veg} ${i.cut.toLowerCase()} ${i.qty} ${i.unit}`).join(", ") + (order.total != null ? ` · Total ${money(order.total)}` : "");
   const kitchen = new URL("kitchen.html#" + id, location.href).href;
   try {
     await fetch("https://ntfy.sh/", { // JSON publish goes to the root URL
@@ -137,4 +152,12 @@ export async function staffSignIn(email, pw) {
 export async function staffSignOut() {
   if (mode === "demo") return lsSet(LS.staff, false);
   await fb.a.signOut(fb.auth);
+}
+
+// ---------- icons ----------
+const ICONS = [["onion","🧅"],["tomato","🍅"],["carrot","🥕"],["pepper","🫑"],["chili","🌶️"],["potato","🥔"],["cabbage","🥬"],["lettuce","🥬"],["spinach","🥬"],["bean","🫛"],["pea","🫛"],["okra","🌿"],["cauliflower","🥦"],["broccoli","🥦"],["cucumber","🥒"],["corn","🌽"],["garlic","🧄"],["ginger","🫚"],["mushroom","🍄"],["eggplant","🍆"],["brinjal","🍆"],["mix","🥗"],["curry","🥗"]];
+export function vegIcon(name = "") {
+  const n = name.toLowerCase();
+  const hit = ICONS.find(([k]) => n.includes(k));
+  return hit ? hit[1] : "🥬";
 }
