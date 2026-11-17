@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 <header>
@@ -83,8 +83,8 @@
 
 <script>addEventListener("error", () => document.getElementById("loadErr").classList.remove("hidden"));</script>
 <script type="module">
-import * as S from "./store.js?v=9";
-import { SHOP } from "./config.js?v=9";
+import * as S from "./store.js?v=10";
+import { SHOP } from "./config.js?v=10";
 const $ = id => document.getElementById(id);
 const NEXT = { new: ["prepping", "Start cutting"], prepping: ["ready", "Mark ready"], ready: ["done", "Picked up"] };
 const LABEL = { new: "New", prepping: "Cutting", ready: "Ready", done: "Picked up", cancelled: "Cancelled" };

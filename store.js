@@ -1,7 +1,7 @@
 // Data layer: Firebase (live, free Spark plan) or DEMO (localStorage, this browser only).
 // Read config as a namespace so a missing setting can never stop the page from loading.
 // Keep ?v= the same as in index.html / kitchen.html and bump it on every update.
-import * as C from "./config.js?v=9";
+import * as C from "./config.js?v=10";
 const { FIREBASE, DEFAULT_MENU, NTFY_TOPIC } = C;
 const WHATSAPP_STAFF = Array.isArray(C.WHATSAPP_STAFF) ? C.WHATSAPP_STAFF : [];
 const SHOP = C.SHOP || {};

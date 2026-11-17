@@ -27,7 +27,7 @@ export const FIREBASE = {
 // Free phone notifications for new orders via the ntfy app (https://ntfy.sh).
 // Install "ntfy" on your phone, tap + and subscribe to the SAME name you put here.
 // Pick a long, hard-to-guess name (anyone who knows it can see the alerts). null = off.
-export const NTFY_TOPIC = null; // e.g. "freshcut-orders-k82jd9q"
+export const NTFY_TOPIC = "cutveg-orders-c8sclyangshy"; // e.g. "freshcut-orders-k82jd9q"
 
 // Free WhatsApp alert to staff for every new order, via CallMeBot (https://www.callmebot.com).
 // Each staff phone does a one-time setup to get its own apikey. Add one entry per phone.
