@@ -3,18 +3,11 @@
 // 2) To go live for free, create a Firebase project (Spark plan, no card needed),
 //    add a Web App, and paste its config object below. See README.md.
 
-export const FIREBASE = {
-  apiKey: "AIzaSyAUjyZXqjqKImJ4ctmVEUqHRNjuu4eUBGs",
-  authDomain: "cut-veggies-c6325.firebaseapp.com",
-  projectId: "cut-veggies-c6325",
-  storageBucket: "cut-veggies-c6325.firebasestorage.app",
-  messagingSenderId: "1098955803417",
-  appId: "1:1098955803417:web:71a75c62bfd6c4341c1388"
-};
+export const FIREBASE = null;
 
 // Optional switch-off time. After this moment the site stops using Firebase and
 // goes back to demo mode. null = never switch off.
-export const FIREBASE_UNTIL = "2026-11-18T23:59:00-05:00"; // e.g. "2026-11-18T23:59:00-05:00"
+export const FIREBASE_UNTIL = null; // e.g. "2026-11-18T23:59:00-05:00"
 /* Example:
 export const FIREBASE = {
   apiKey: "AIza...",
